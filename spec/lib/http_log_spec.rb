@@ -409,25 +409,30 @@ describe HttpLog do
         end
       end
 
-      context 'connection timeout' do
+      context 'connection error' do
         if adapter_class.method_defined? :send_connect
+          let(:json_log) { true }
           before do
             allow_any_instance_of(adapter_class.native_adapter_class).to receive(:orig_connect).and_raise(Timeout::Error.new)
             expect{adapter.send_connect}.to raise_error(Timeout::Error)
           end
-          it { is_expected.to include("Connecting: #{host}:#{port}") }
-          it { is_expected.to include("Error connecting to #{host}:#{port} - #<Timeout::Error: Timeout::Error>") }
+          it { expect(json['response_headers']['error']).to eq '#<Timeout::Error: Timeout::Error>' }
+          it { expect(json['benchmark']).to be > 0 }
+          it { expect(json['url']).to eq "http://#{host}:#{port}" }
         end
       end
 
       context 'request error' do
         if adapter_class.method_defined? :request_error
+          let(:json_log) { true }
           before do
             allow_any_instance_of(adapter_class.native_adapter_class).to receive(:orig_request).and_raise(IOError.new('closed stream'))
             expect{adapter.request_error}.to raise_error(IOError)
           end
-          it { is_expected.to include("Connecting: #{host}:#{port}") }
-          it { is_expected.to include("Request error raised #{host}:#{port} - #<IOError: closed stream>") }
+          it { expect(json['method']).to eq 'GET' }
+          it { expect(json['url']).to eq "http://#{host}:#{port}#{path}?#{data}" }
+          it { expect(json['response_headers']['error']).to eq '#<IOError: closed stream>' }
+          it { expect(json['benchmark']).to be > 0 }
         end
       end
     end
