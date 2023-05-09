@@ -8,12 +8,12 @@ module Net
     def request(req, body = nil, &block)
       url = "http://#{@address}:#{@port}#{req.path}"
 
+      request_error = nil
       bm = Benchmark.realtime do
         begin
           @response = orig_request(req, body, &block)
         rescue Exception => e
-          HttpLog.log("Request error raised #{[@address, @port].compact.join(':')} - #{e.inspect}")
-          raise e
+          request_error = e
         end
       end
       body_stream  = req.body_stream
@@ -26,6 +26,19 @@ module Net
                      else
                        req.body
                      end
+
+      if request_error
+        HttpLog.call(
+          method: req.method,
+          url: url,
+          request_body: request_body,
+          request_headers: req.each_header.collect,
+          response_headers: {error: request_error.inspect},
+          benchmark: bm,
+          mask_body: HttpLog.masked_body_url?(url)
+        )
+        raise request_error
+      end
 
       if HttpLog.url_approved?(url) && started?
         HttpLog.call(
@@ -49,11 +62,22 @@ module Net
     def connect
       HttpLog.log_connection(@address, @port) if !started? && HttpLog.url_approved?("#{@address}:#{@port}")
 
-      begin
-        orig_connect
-      rescue Timeout::Error => e
-        HttpLog.log("Error connecting to #{[@address, @port].compact.join(':')} - #{e.inspect}")
-        raise e
+      connection_error = nil
+      bm = Benchmark.realtime do
+        begin
+          orig_connect
+        rescue Exception => e
+          connection_error = e
+        end
+      end
+
+      if connection_error
+        HttpLog.call(
+          url: "http://#{@address}:#{@port}",
+          response_headers: {error: connection_error.inspect},
+          benchmark: bm
+        )
+        raise connection_error
       end
     end
   end
