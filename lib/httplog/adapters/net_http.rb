@@ -28,15 +28,17 @@ module Net
                      end
 
       if request_error
-        HttpLog.call(
-          method: req.method,
-          url: url,
-          request_body: request_body,
-          request_headers: req.each_header.collect,
-          response_headers: {error: request_error.inspect},
-          benchmark: bm,
-          mask_body: HttpLog.masked_body_url?(url)
-        )
+        if HttpLog.url_approved?(url)
+          HttpLog.call(
+            method: req.method,
+            url: url,
+            request_body: request_body,
+            request_headers: req.each_header.collect,
+            response_headers: {error: request_error.inspect},
+            benchmark: bm,
+            mask_body: HttpLog.masked_body_url?(url)
+          )
+        end
         raise request_error
       end
 
@@ -60,7 +62,8 @@ module Net
     end
 
     def connect
-      HttpLog.log_connection(@address, @port) if !started? && HttpLog.url_approved?("#{@address}:#{@port}")
+      url = "http://#{@address}:#{@port}"
+      HttpLog.log_connection(@address, @port) if !started? && HttpLog.url_approved?(url)
 
       connection_error = nil
       bm = Benchmark.realtime do
@@ -72,11 +75,13 @@ module Net
       end
 
       if connection_error
-        HttpLog.call(
-          url: "http://#{@address}:#{@port}",
-          response_headers: {error: connection_error.inspect},
-          benchmark: bm
-        )
+        if HttpLog.url_approved?(url)
+          HttpLog.call(
+            url: url,
+            response_headers: {error: connection_error.inspect},
+            benchmark: bm
+          )
+        end
         raise connection_error
       end
     end
